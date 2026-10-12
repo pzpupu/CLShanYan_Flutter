@@ -1,6 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Flutter 发布构建启用资源压缩；按 Android tools:keep 语法保留 SDK 动态查找的资源。 -->
 <resources xmlns:tools="http://schemas.android.com/tools"
-    tools:keep="R.anim.umcsdk*,
-    R.drawable.umcsdk*,
-    R.layout.layout_shanyan*,
-    R.id.shanyan_view*" />
+    tools:keep="@anim/umcsdk*,@drawable/umcsdk*,@layout/layout_shanyan*,@id/shanyan_view*" />

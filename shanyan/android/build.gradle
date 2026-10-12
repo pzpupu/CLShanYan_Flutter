@@ -1,40 +1,22 @@
 group 'com.shanyan'
 version '1.0'
 
-buildscript {
-    repositories {
-        google()
-        jcenter()
-        mavenCentral()
-
-    }
-
-    dependencies {
-        classpath("com.android.tools.build:gradle:8.1.0")
-    }
-}
-
-rootProject.allprojects {
-    repositories {
-        google()
-        jcenter()
-        mavenCentral()
-    }
-}
+// 插件复用宿主锁定的 Android Gradle Plugin 和仓库，不引入旧 AGP 或已下线的 JCenter。
 
 apply plugin: 'com.android.library'
 
 android {
     namespace = "com.shanyan"
 
-    compileSdkVersion 31
+    // 当前 Flutter embedding 的 AndroidX 依赖要求 API 34+，与宿主保持 API 36；不提高 minSdk。
+    compileSdk = 36
 
     defaultConfig {
-        minSdkVersion 16
+        minSdk = 16
         consumerProguardFiles "consumer-rules.pro"
     }
-    lintOptions {
-        checkReleaseBuilds false
+    lint {
+        checkReleaseBuilds = false
     }
 }
 dependencies {

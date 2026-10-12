@@ -16,7 +16,8 @@ A new Flutter plugin.
   s.public_header_files = 'Classes/**/*.h'
   s.dependency 'Flutter'
   s.static_framework = true
-  s.ios.dependency 'CL_ShanYanSDK', '~> 2.3.7.7'
+  # 与官方 Flutter 提交配套的原生版本固定，避免 pod install 隐式升级二进制。
+  s.ios.dependency 'CL_ShanYanSDK', '= 2.3.7.7'
   s.ios.deployment_target = '15.0'
 end
 

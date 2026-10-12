@@ -24,6 +24,9 @@ class OneKeyLoginManager {
 
   final MethodChannel _channel = const MethodChannel("shanyan");
 
+  // 应用兼容补丁：原生事件必须匹配本次授权，关闭后立即拒绝迟到令牌。
+  String? _activeRequestId;
+
   ShanYanUIConfig shanYanUIConfig = new ShanYanUIConfig();
 
   OneKeyLoginManager() {
@@ -42,49 +45,49 @@ class OneKeyLoginManager {
     _eventHanders.pricacyOnClickListener = callback;
   }
 
-//  /// 设置调试模式开关 Android
-  void setDebug(bool debug) {
-    _channel.invokeMethod("setDebugMode", {"debug": debug});
+  /// 关闭或开启 Android 调试日志，并等待原生执行回执。
+  Future<void> setDebug(bool debug) async {
+    await _channel.invokeMethod<void>("setDebugMode", {"debug": debug});
   }
 
   /// 设置详细调试模式开关 (Android + iOS)
-  void setInitDebug(bool debug) {
-    _channel.invokeMethod("setInitDebug", {"initDebug": debug});
+  Future<void> setInitDebug(bool debug) async {
+    await _channel.invokeMethod<void>("setInitDebug", {"initDebug": debug});
   }
 
   /// 设置预取号超时时间（单位：秒）(Android + iOS)
-  void setTimeOutForPreLogin(int timeOut) {
-    _channel.invokeMethod("setTimeOutForPreLogin", {"timeOut": timeOut});
+  Future<void> setTimeOutForPreLogin(int timeOut) async {
+    await _channel.invokeMethod<void>("setTimeOutForPreLogin", {"timeOut": timeOut});
   }
 
   /// 设置是否获取OAID
-  void getOaidEnable(bool oaidEnable) {
-    _channel.invokeMethod("getOaidEnable", {"oaidEnable": oaidEnable});
+  Future<void> getOaidEnable(bool oaidEnable) async {
+    await _channel.invokeMethod<void>("getOaidEnable", {"oaidEnable": oaidEnable});
   }
 
   /// 设置是否获取iccid
-  void getSinbEnable(bool sinbEnable) {
-    _channel.invokeMethod("getSinbEnable", {"sinbEnable": sinbEnable});
+  Future<void> getSinbEnable(bool sinbEnable) async {
+    await _channel.invokeMethod<void>("getSinbEnable", {"sinbEnable": sinbEnable});
   }
 
   /// 设置是否获取IMSI
-  void getSiEnable(bool sibEnable) {
-    _channel.invokeMethod("getSiEnable", {"sibEnable": sibEnable});
+  Future<void> getSiEnable(bool sibEnable) async {
+    await _channel.invokeMethod<void>("getSiEnable", {"sibEnable": sibEnable});
   }
 
   /// 设置是否获取IP(Android + iOS)
-  void getIEnable(bool iEnable) {
-    _channel.invokeMethod("getIEnable", {"iEnable": iEnable});
+  Future<void> getIEnable(bool iEnable) async {
+    await _channel.invokeMethod<void>("getIEnable", {"iEnable": iEnable});
   }
 
   /// 设置是否获取Mac地址
-  void getMaEnable(bool maEnable) {
-    _channel.invokeMethod("getMaEnable", {"maEnable": maEnable});
+  Future<void> getMaEnable(bool maEnable) async {
+    await _channel.invokeMethod<void>("getMaEnable", {"maEnable": maEnable});
   }
 
   /// 设置是否获取IMEI
-  void getImEnable(bool imEnable) {
-    _channel.invokeMethod("getImEnable", {"imEnable": imEnable});
+  Future<void> getImEnable(bool imEnable) async {
+    await _channel.invokeMethod<void>("getImEnable", {"imEnable": imEnable});
   }
 
   /// 设置是否设置监听生命周期
@@ -133,15 +136,17 @@ class OneKeyLoginManager {
     _eventHanders.shanYanWidgetEventListener = callback;
   }
 
-  ///闪验SDK 拉起授权页(Android+iOS)
-  Future<ShanYanResult> openLoginAuth() async {
+  /// 拉起授权页，并以 [requestId] 隔离原生迟到事件；回执不是登录令牌。
+  Future<ShanYanResult> openLoginAuth({required String requestId}) async {
+    _activeRequestId = requestId;
     if (Platform.isAndroid) {
       Map<dynamic, dynamic> result =
-          await _channel.invokeMethod("openLoginAuth");
+          await _channel.invokeMethod("openLoginAuth", {"requestId": requestId});
       Map<String, dynamic> newResult = new Map<String, dynamic>.from(result);
       return ShanYanResult.fromJson(newResult);
     } else if (Platform.isIOS) {
       Map iosConfigure = this.shanYanUIConfig.ios.toJson();
+      iosConfigure["requestId"] = requestId;
       Map<dynamic, dynamic> result =
           await _channel.invokeMethod("openLoginAuth", iosConfigure);
       Map<String, dynamic> newResult = new Map<String, dynamic>.from(result);
@@ -151,8 +156,9 @@ class OneKeyLoginManager {
     }
   }
 
-  ///闪验SDK 主动销毁授权页 Android+IOS
+  /// 立即使本轮事件失效并关闭授权页；回执不代表上游网络请求已取消。
   Future<void> finishAuthControllerCompletion() async {
+    _activeRequestId = null;
     if (Platform.isIOS) {
       return await _channel.invokeMethod("finishAuthControllerCompletion");
     } else if (Platform.isAndroid) {
@@ -194,13 +200,13 @@ class OneKeyLoginManager {
   }
 
   /// 清除预取号缓存
-  void clearScripCache() {
-    _channel.invokeMethod("clearScripCache");
+  Future<void> clearScripCache() async {
+    await _channel.invokeMethod<void>("clearScripCache");
   }
 
   /// 清理回调监听
-  void removeAllListener() {
-    _channel.invokeMethod("removeAllListener");
+  Future<void> removeAllListener() async {
+    await _channel.invokeMethod<void>("removeAllListener");
   }
 
   // /// 获取授权页协议勾选框CheckBox对象
@@ -214,14 +220,11 @@ class OneKeyLoginManager {
   }
 
   ///闪验SDK 配置授权页 Android
-  void setAuthThemeConfig({required ShanYanUIConfig uiConfig}) {
+  Future<void> setAuthThemeConfig({required ShanYanUIConfig uiConfig}) async {
     shanYanUIConfig = uiConfig;
-    if (Platform.isIOS) {
-     // print("uiConfig====" + uiConfig.ios.toJson().toString());
-    } else if (Platform.isAndroid) {
+    if (Platform.isAndroid) {
       Map<String, dynamic> uiConfigJson = uiConfig.toJson();
-      _channel.invokeMethod("setAuthThemeConfig", uiConfigJson);
-      print("uiConfig====" + uiConfig.androidLandscape.toJson().toString());
+      await _channel.invokeMethod<void>("setAuthThemeConfig", uiConfigJson);
     }
   }
 
@@ -231,6 +234,9 @@ class OneKeyLoginManager {
       case 'onReceiveAuthPageEvent':
         Map<String, dynamic> newResult =
             new Map<String, dynamic>.from(call.arguments);
+        // 原生闭包携带发起时的编号，不能把旧页面的成功事件转交新页面。
+        if (_activeRequestId == null ||
+            newResult["requestId"] != _activeRequestId) return;
         ShanYanResult result = ShanYanResult.fromJson(newResult);
         _eventHanders.oneKeyLoginListener?.call(result);
         break;

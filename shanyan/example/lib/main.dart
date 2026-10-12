@@ -32,6 +32,9 @@ class _MyAppState extends State<MyApp> {
 
   final OneKeyLoginManager oneKeyLoginManager = new OneKeyLoginManager();
 
+  // 每次授权使用独立编号，原生迟到回调不能认领后续页面。
+  static int _authRequestSequence = 0;
+
   @override
   void initState() {
     // TODO: implement initState
@@ -139,7 +142,9 @@ class _MyAppState extends State<MyApp> {
     });
 
     ///闪验SDK 拉起授权页
-    oneKeyLoginManager.openLoginAuth().then((ShanYanResult shanYanResult) {
+    oneKeyLoginManager.openLoginAuth(
+      requestId: '${++_authRequestSequence}',
+    ).then((ShanYanResult shanYanResult) {
       setState(() {
         _code = shanYanResult.code ?? 0;
         _result = shanYanResult.message ?? "";

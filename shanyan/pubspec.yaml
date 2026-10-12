@@ -4,15 +4,19 @@ version: 2.3.4
 author: CL253 <app@253.com>
 homepage: https://www.chuanglan.com
 
+# 上游固定来源：https://github.com/253CL/CLShanYan_Flutter
+# 提交：1fab9f1b0cda802211361afa64ae4028edee8891（v2.3.5.1；上游 Dart 版本字段仍为 2.3.4）。
+# 兼容宿主工具链、平台注册与异步通道；原生 SDK 二进制保持官方原样。
+
 environment:
   sdk: ">=3.1.0 <4.0.0"
   flutter: ">=1.20.0"
 
 dependencies:
-  build_resolvers: ^2.4.2
   flutter:
     sdk: flutter
-  json_annotation: 4.9.0
+  # 预生成模型只依赖注解和枚举解码；构建器不是运行依赖，不拖入旧 analyzer。
+  json_annotation: ^4.9.0
 
 dev_dependencies:
   flutter_test:
@@ -24,13 +28,14 @@ dev_dependencies:
 
 # The following section is specific to Flutter.
 flutter:
-  # This sectiopub publish --dry-runn identifies this Flutter project as a plugin project.
-  # The androidPackage and pluginClass identifiers should not ordinarily
-  # be modified. They are used by the tooling to maintain consistency when
-  # adding or updating assets for this project.
+  # 显式声明 Flutter 新式插件注册，避免继续依赖旧版 androidPackage 元数据推断。
   plugin:
-    androidPackage: com.shanyan
-    pluginClass: ShanyanPlugin
+    platforms:
+      android:
+        package: com.shanyan
+        pluginClass: ShanyanPlugin
+      ios:
+        pluginClass: ShanyanPlugin
 
   # To add assets to your plugin package, add an assets section, like this:
   # assets:

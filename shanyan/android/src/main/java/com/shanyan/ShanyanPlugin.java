@@ -82,10 +82,12 @@ public class ShanyanPlugin implements FlutterPlugin, MethodCallHandler {
         if (call.method.equals("setDebugMode")) {
             //闪验SDK 设置debug模式
             setDebug(call);
+            result.success(null);
         }
         if (call.method.equals("setInitDebug")) {
             //闪验SDK 设置debug模式
             setInitDebug(call);
+            result.success(null);
         }
         if (call.method.equals("getOperatorType")) {
             //闪验SDK 获取运营商类型
@@ -105,6 +107,7 @@ public class ShanyanPlugin implements FlutterPlugin, MethodCallHandler {
         }
         if (call.method.equals("setAuthThemeConfig")) {
             setAuthThemeConfig(call, result);
+            result.success(null);
         }
         if (call.method.equals("openLoginAuth")) {
             //闪验SDK 拉起授权页
@@ -112,6 +115,8 @@ public class ShanyanPlugin implements FlutterPlugin, MethodCallHandler {
         }
         if (call.method.equals("finishAuthActivity")) {
             OneKeyLoginManager.getInstance().finishAuthActivity();
+            // 回执只表示已执行关闭调用，不代表运营商网络请求已经取消。
+            result.success(null);
         }
         if (call.method.equals("getPreIntStatus")) {
             result.success(OneKeyLoginManager.getInstance().getPreIntStatus());
@@ -133,28 +138,36 @@ public class ShanyanPlugin implements FlutterPlugin, MethodCallHandler {
         }
         if (call.method.equals("getOaidEnable")) {
             getOaidEnable(call);
+            result.success(null);
         }
         if (call.method.equals("getSinbEnable")) {
             getSinbEnable(call);
+            result.success(null);
         }
         if (call.method.equals("getSiEnable")) {
             getSiEnable(call);
+            result.success(null);
         }
         if (call.method.equals("getIEnable")) {
             getIEnable(call);
+            result.success(null);
         }
         if (call.method.equals("getMaEnable")) {
             getMaEnable(call);
+            result.success(null);
         }
         if (call.method.equals("getImEnable")) {
             getImEnable(call);
+            result.success(null);
         }
         if (call.method.equals("clearScripCache")) {
             OneKeyLoginManager.getInstance().clearScripCache(context);
+            result.success(null);
         }
         if (call.method.equals("setTimeOutForPreLogin")) {
             int timeOut = call.argument("timeOut");
             OneKeyLoginManager.getInstance().setTimeOutForPreLogin(timeOut);
+            result.success(null);
         }
         if (call.method.equals("performLoginClick")) {
             OneKeyLoginManager.getInstance().performLoginClick();
@@ -172,6 +185,7 @@ public class ShanyanPlugin implements FlutterPlugin, MethodCallHandler {
         }
         if (call.method.equals("removeAllListener")) {
             OneKeyLoginManager.getInstance().removeAllListener();
+            result.success(null);
         }
     }
 
@@ -285,6 +299,8 @@ public class ShanyanPlugin implements FlutterPlugin, MethodCallHandler {
     }
 
     private void openLoginAuth(MethodCall call, final Result result) {
+        // 捕获发起页面时的编号，异步结果不得借用后来页面的编号。
+        final String requestId = call.argument("requestId");
         //闪验SDK 拉起授权页
         OneKeyLoginManager.getInstance().openLoginAuth(isFinish, new OpenLoginAuthListener() {
             @Override
@@ -307,6 +323,7 @@ public class ShanyanPlugin implements FlutterPlugin, MethodCallHandler {
             public void getOneKeyLoginStatus(int code, String msg) {
                 //点击授权页“一键登录”按钮或者返回键（包括物理返回键）回调
                 Map<String, Object> map = new HashMap<>();
+                map.put("requestId", requestId);
                 map.put(shanyan_code, code);
                 try {
                     JSONObject jsonObject = new JSONObject(msg);

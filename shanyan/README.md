@@ -231,11 +231,13 @@ _content = shanYanResult.toJson().toString();
 
 - 调用拉起授权页方法后将会调起运营商授权页面。**已登录状态请勿调用 。**
 - **每次调用拉起授权页方法前均需先调用授权页配置方法，否则授权页可能会展示异常。**
+- 本 fork 要求 `requestId` 在当前进程每次授权中唯一；关闭后旧编号的回调被丢弃。应用仍须顺序取号、避免同时展示多个授权页，令牌只从 `setOneKeyLoginListener` 消费。
 
 <br />调用示例：<br />
 
 ```dart
-oneKeyLoginManager.openLoginAuth()
+// authRequestSequence 是调用方持有的进程级递增计数，不在每次调用中重置。
+oneKeyLoginManager.openLoginAuth(requestId: '${++authRequestSequence}')
 .
 then
 ((

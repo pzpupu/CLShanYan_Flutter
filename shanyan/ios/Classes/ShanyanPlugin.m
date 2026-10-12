@@ -57,14 +57,18 @@
         [self setCheckBoxValue:call];
     }else if ([@"clearScripCache" isEqualToString:call.method]){
         [self clearScripCache];
+        result(nil);
     }else if ([@"performLoginClick" isEqualToString:call.method]){
         [self loginBtnClick];
     }else if ([@"setTimeOutForPreLogin" isEqualToString:call.method]){
         [self setPreGetPhonenumberTimeOut:call];
+        result(nil);
     }else if ([@"setInitDebug" isEqualToString:call.method]){
         [self printConsoleEnable:call];
+        result(nil);
     }else if ([@"getIEnable" isEqualToString:call.method]){
         [self getIEnable:call];
+        result(nil);
     }
     else {
         result(FlutterMethodNotImplemented);
@@ -133,7 +137,10 @@
 }
 
 -(void)clShanYanSDKManagerAuthPageAfterViewDidLoad:(UIView *_Nonnull)authPageView currentTelecom:(NSString *_Nullable)telecom {
-    [authPageView addGestureRecognizer:[[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(tap)]];
+    // SDK 委托可能来自后台队列，UIKit 控件只能在主线程操作。
+    [ShanyanPlugin performMainBlock:^{
+        [authPageView addGestureRecognizer:[[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(tap)]];
+    }];
 }
 
 - (void)init:(FlutterMethodCall*)call complete:(FlutterResult)complete{
@@ -153,7 +160,9 @@
     [CLShanYanSDKManager initWithAppId:appId complete:^(CLCompleteResult * _Nonnull completeResult) {
         
         if (complete) {
-            complete([ShanyanPlugin completeResultToJson:completeResult]);
+            [ShanyanPlugin performMainBlock:^{
+                complete([ShanyanPlugin completeResultToJson:completeResult]);
+            }];
         }
     }];
 }
@@ -162,12 +171,16 @@
     
     [CLShanYanSDKManager preGetPhonenumber:^(CLCompleteResult * _Nonnull completeResult) {
         if (complete) {
-            complete([ShanyanPlugin completePhoneResultToJson:completeResult]);
+            [ShanyanPlugin performMainBlock:^{
+                complete([ShanyanPlugin completePhoneResultToJson:completeResult]);
+            }];
         }
     }];
 }
 
 -(void)quickAuthLoginWithConfigure:(NSDictionary *)clUIConfigure complete:(FlutterResult)complete{
+    // 捕获本次编号，关闭后的迟到回调由 Dart 桥接层拒绝。
+    NSString *requestId = [clUIConfigure[@"requestId"] copy];
     
     CLUIConfigure * baseUIConfigure = [self configureWithConfig:clUIConfigure];
     baseUIConfigure.viewController = [self findVisibleVC];
@@ -177,7 +190,9 @@
     [CLShanYanSDKManager setCLShanYanSDKManagerDelegate:self];
     [CLShanYanSDKManager quickAuthLoginWithConfigure:baseUIConfigure openLoginAuthListener:^(CLCompleteResult * _Nonnull completeResult) {
         if (complete) {
-            complete([ShanyanPlugin completeResultToJson:completeResult]);
+            [ShanyanPlugin performMainBlock:^{
+                complete([ShanyanPlugin completeResultToJson:completeResult]);
+            }];
         }
         
     } oneKeyLoginListener:^(CLCompleteResult * _Nonnull completeResult) {
@@ -187,7 +202,11 @@
         //一键登录回调
         if (strongSelf.channel) {
             [ShanyanPlugin performMainBlock:^{
-                [strongSelf.channel invokeMethod:@"onReceiveAuthPageEvent" arguments:[ShanyanPlugin completeResultToJson:completeResult]];
+                NSMutableDictionary *event = [[ShanyanPlugin completeResultToJson:completeResult] mutableCopy];
+                if (requestId != nil) {
+                    event[@"requestId"] = requestId;
+                }
+                [strongSelf.channel invokeMethod:@"onReceiveAuthPageEvent" arguments:event];
             }];
             
         }
@@ -1857,7 +1876,9 @@
     [CLShanYanSDKManager finishAuthControllerAnimated:YES
                                            Completion:^{
         if (completion) {
-            completion(nil);
+            [ShanyanPlugin performMainBlock:^{
+                completion(nil);
+            }];
         }
     }];
 }

@@ -21,4 +21,6 @@ android {
 }
 dependencies {
     api files('libs/shanyan_sdk_v2.3.7.7_flutter.jar')
+    // 联通 SDK 的 SM2/SM3 路径直接引用这些类；必须提供实现，不能用 R8 dontwarn 隐藏缺类。
+    implementation 'org.bouncycastle:bcprov-jdk18on:1.86'
 }

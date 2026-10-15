@@ -2,61 +2,28 @@
 * 闪验SDK 授权页UI 配置类
 * */
 
-import 'package:flutter/material.dart';
 import 'package:json_annotation/json_annotation.dart';
 
 part 'shanYanUIConfig.g.dart';
 
-/// 修改UI属性后，需删除shanyan.g.dart,再执行`flutter packages pub run build_runner build`，会生成新的 shanyan.g.dart; 运行 ` flutter packages pub run build_runner clean ` 清空文件
+/// 两端授权页配置，平台对象可独立替换并序列化到原生桥接。
+///
+/// 修改模型后在插件目录运行 `dart run build_runner build --delete-conflicting-outputs`，
+/// 由生成器更新 `shanYanUIConfig.g.dart`，不要手工修改生成内容。
 
 //Flutter 的 Github 上有关于这个问题的讨论 Failed to upload the package #16658，错误是因为伟大的墙。
 //我这里使用以下命令解决问题：sudo flutter packages pub publish -v  //https://pub.dartlang.org/api/packages/shanyan.
 
 @JsonSerializable(explicitToJson: true, includeIfNull: false)
 class ShanYanUIConfig {
-  ShanYanUIConfigIOS _ios = new ShanYanUIConfigIOS(); //iOS
-  // ignore: unnecessary_getters_setters
-  set ios(ShanYanUIConfigIOS ios) => _ios;
+  /// iOS 授权页配置，可直接替换为另一份完整配置。
+  ShanYanUIConfigIOS ios = ShanYanUIConfigIOS();
 
-  // ignore: unnecessary_getters_setters
-  ShanYanUIConfigIOS get ios {
-    // ignore: unnecessary_null_comparison
-    if (_ios == null) {
-      _ios = new ShanYanUIConfigIOS();
-    }
-    return _ios;
-  }
+  /// Android 竖屏授权页配置，与横屏配置独立保存。
+  ShanYanUIConfigAndroid androidPortrait = ShanYanUIConfigAndroid();
 
-  ShanYanUIConfigAndroid _androidPortrait =
-  new ShanYanUIConfigAndroid(); //Android竖屏
-  ShanYanUIConfigAndroid _androidLandscape =
-  new ShanYanUIConfigAndroid(); //Android横屏
-
-  // ignore: unnecessary_getters_setters,
-  set androidPortrait(ShanYanUIConfigAndroid androidPortrait) =>
-      _androidPortrait;
-
-  // ignore: unnecessary_getters_setters
-  ShanYanUIConfigAndroid get androidPortrait {
-    // ignore: unnecessary_null_comparison
-    if (_androidPortrait == null) {
-      _androidPortrait = new ShanYanUIConfigAndroid();
-    }
-    return _androidPortrait;
-  }
-
-  // ignore: unnecessary_getters_setters
-  set androidLandscape(ShanYanUIConfigAndroid androidLandscape) =>
-      _androidLandscape;
-
-  // ignore: unnecessary_getters_setters
-  ShanYanUIConfigAndroid get androidLandscape {
-    // ignore: unnecessary_null_comparison
-    if (_androidLandscape == null) {
-      _androidLandscape = new ShanYanUIConfigAndroid();
-    }
-    return _androidLandscape;
-  }
+  /// Android 横屏授权页配置，与竖屏配置独立保存。
+  ShanYanUIConfigAndroid androidLandscape = ShanYanUIConfigAndroid();
 
   ShanYanUIConfig();
 
@@ -305,11 +272,30 @@ class ShanYanUIConfigIOS {
   /// 按钮文字颜色
   String? setLogBtnTextColor;
 
-  /// 号码栏字体
+  /// 登录按钮字号，单位为 iOS 逻辑点。
   num? setLoginBtnTextSize;
 
-  /// 号码栏字体是否加粗
+  /// 登录按钮文字是否使用粗体。
   bool? setLoginBtnTextBold;
+
+  /// 登录按钮的非负逻辑阴影高度；`0` 关闭阴影，未设置时保留 SDK 外观。
+  ///
+  /// iOS 使用对应强度的柔化投影，不把此值当成视图的布局或层级偏移。
+  num? setLogBtnElevation;
+
+  /// 登录按钮阴影颜色，支持 `#AARRGGBB`，透明度只应用一次。
+  ///
+  /// 与 [setLogBtnElevation] 一起配置，不改变按钮背景或文字透明度。
+  String? setLogBtnShadowColor;
+
+  /// 登录按钮按压时相对原始大小的比例，取值 `(0, 1]`；未设置时不添加缩放。
+  num? setLogBtnPressedScale;
+
+  /// 登录按钮按压状态层颜色，支持 `#AARRGGBB`，不改写静态底色。
+  String? setLogBtnPressedOverlayColor;
+
+  /// 登录按钮状态与缩放过渡的毫秒数；`0` 表示即时反馈。
+  int? setLogBtnAnimationDuration;
 
   /// 按钮背景颜色
   String? setLoginBtnBgColor;
@@ -461,6 +447,11 @@ class ShanYanUIConfigIOS {
   /// slogan是否隐藏
   bool? setSloganTextHidden;
 
+  /// 追加到 SDK 真实运营商说明后的文字；空值不修改原文。
+  ///
+  /// 原生页支持自然换行，调用方须给说明预留足够高度。
+  String? setSloganTextSuffix;
+
 //供应商品牌标签("创蓝253提供认技术支持")
   /// slogan文字字体大小
   num? setShanYanSloganTextSize;
@@ -597,35 +588,11 @@ class ShanYanUIConfigIOS {
   /**弹窗的MaskLayer，用于自定义窗口形状*/
 //  @property (nonatomic,strong) CALayer * clAuthWindowMaskLayer;
 
-  //布局设置
-  /// 横屏下使用的布局
-  ClOrientationLayOutIOS _layOutPortrait = new ClOrientationLayOutIOS();
+  /// 竖屏下使用的布局，可直接替换且不会影响横屏布局。
+  ClOrientationLayOutIOS layOutPortrait = ClOrientationLayOutIOS();
 
-  /// 竖屏下使用的布局(不需要则不设置)
-  ClOrientationLayOutIOS _layOutLandscape = new ClOrientationLayOutIOS();
-
-  // ignore: unnecessary_getters_setters,
-  set layOutPortrait(ClOrientationLayOutIOS layOutPortrait) => _layOutPortrait;
-
-  // ignore: unnecessary_getters_setters
-  ClOrientationLayOutIOS get layOutPortrait {
-    // if (_layOutPortrait == null) {
-    //   _layOutPortrait = new ClOrientationLayOutIOS();
-    // }
-    return _layOutPortrait;
-  }
-
-  // ignore: unnecessary_getters_setters
-  set layOutLandscape(ClOrientationLayOutIOS layOutLandscape) =>
-      _layOutLandscape;
-
-  // ignore: unnecessary_getters_setters
-  ClOrientationLayOutIOS get layOutLandscape {
-    // if (_layOutLandscape == null) {
-    //   _layOutLandscape = new ClOrientationLayOutIOS();
-    // }
-    return _layOutLandscape;
-  }
+  /// 横屏下使用的布局，可直接替换且不会影响竖屏布局。
+  ClOrientationLayOutIOS layOutLandscape = ClOrientationLayOutIOS();
 
   ShanYanUIConfigIOS();
 
@@ -789,6 +756,23 @@ class ShanYanUIConfigAndroid {
   String? setLogBtnImgPath; //设置授权登录按钮图片
   bool? setLogBtnTextBold; //设置登录按钮字体是否加粗（true：加粗；false：不加粗
 
+  /// 登录按钮的非负逻辑阴影高度，单位 dp；`0` 关闭，未设置时保留 SDK 外观。
+  num? setLogBtnElevation;
+
+  /// 登录按钮阴影颜色，支持 `#AARRGGBB`，不改变按钮内容透明度。
+  ///
+  /// 与 [setLogBtnElevation] 一起配置，颜色能力遵循当前 Android 平台。
+  String? setLogBtnShadowColor;
+
+  /// 登录按钮按压时相对原始大小的比例，取值 `(0, 1]`；未设置时不添加缩放。
+  num? setLogBtnPressedScale;
+
+  /// 登录按钮按压状态层颜色，支持 `#AARRGGBB`，不改写静态底色。
+  String? setLogBtnPressedOverlayColor;
+
+  /// 登录按钮状态与缩放过渡的毫秒数；平台水波使用原生时序。
+  int? setLogBtnAnimationDuration;
+
   //Privacy
   int? setPrivacyOffsetBottomY; //设置隐私条款相对于授权页面底部下边缘y偏移
   int? setPrivacyOffsetY; //设置隐私条款相对于授权页面标题栏下边缘y偏移
@@ -831,6 +815,16 @@ class ShanYanUIConfigAndroid {
   int? setSloganTextSize; //设置slogan文字字体大小
   bool? setSloganHidden = false; //设置slogan是否隐藏（true：隐藏；false：不隐藏）
   bool? setSloganTextBold; //设置slogan文字字体是否加粗（true：加粗；false：不加粗）
+
+  /// 追加到 SDK 真实运营商说明后的文字；空值不修改原文。
+  ///
+  /// 重复显示同一授权页时不会重复追加，不改写运营商协议名称或地址。
+  String? setSloganTextSuffix;
+
+  /// 运营商说明的最大正宽度，单位 dp；未设置时沿用 SDK 布局。
+  ///
+  /// 说明自然换行，调用方须为后续控件预留相应高度。
+  int? setSloganWidth;
 
   //创蓝slogan设置
   int? setShanYanSloganOffsetY; //设置创蓝slogan相对于标题栏下边缘y偏移
@@ -886,13 +880,8 @@ class ShanYanCustomWidgetLayout {
   int width = 0; // 自定义控件宽度，单位dp
   int height = 0; // 自定义控件高度，单位dp
   ShanYanCustomWidgetLayoutType type; //自定义控件类型，目前只支持 textView,button
-  ShanYanCustomWidgetLayout(
-      // ignore: invalid_required_positional_param
-      @required this.widgetLayoutName,
-      @required this.type) {
-    this.widgetLayoutName = widgetLayoutName;
-    this.type = type;
-  }
+  /// 创建 Android 自定义布局配置，布局名和类型均为必需位置参数。
+  ShanYanCustomWidgetLayout(this.widgetLayoutName, this.type);
 
   //反序列化
   factory ShanYanCustomWidgetLayout.fromJson(Map<String, dynamic> json) =>
@@ -909,11 +898,8 @@ class ConfigPrivacyBean {
   String? color = ""; //协议字体颜色
   String? midStr = "、"; //协议中间文字描述
   String? title = ""; //协议页标题
-  // ignore: invalid_required_positional_param
-  ConfigPrivacyBean(@required this.name, @required this.url) {
-    this.name = name;
-    this.url = url;
-  }
+  /// 创建扩展协议配置；这里只保存数据，不加载协议页面。
+  ConfigPrivacyBean(this.name, this.url);
 
   //反序列化
   factory ConfigPrivacyBean.fromJson(Map<String, dynamic> json) =>
@@ -945,6 +931,10 @@ class ShanYanCustomWidget {
   int height = 0; // 自定义控件高度，单位dp
   String textContent = ""; // 自定义控件内容
   double textFont = 13.0; // 自定义控件文字大小，单位sp
+
+  /// 是否使用粗体；`null` 保留默认字体，设置时不改变字号和行数。
+  bool? textBold;
+
   String textColor = "#aa0000"; // 自定义控件文字颜色
   String? backgroundColor; // 自定义控件背景颜色
   String? backgroundImgPath; // 自定义控件背景图片(Only Android available)
@@ -953,11 +943,53 @@ class ShanYanCustomWidget {
   ShanYanCustomWidgetType? type; //自定义控件类型，目前只支持 textView,button
   bool isFinish = true; //点击自定义控件是否自动销毁授权页
 
-  // ignore: invalid_required_positional_param
-  ShanYanCustomWidget(@required this.widgetId, @required this.type) {
-    this.widgetId = widgetId;
-    this.type = type;
-  }
+  /// 是否作为标准授权控件下方的装饰背景，默认为 `false`。
+  ///
+  /// 背景位于授权页背景图上方，不接收点击或无障碍焦点，
+  /// 不执行 [isFinish] 对应的关闭动作。
+  @JsonKey(defaultValue: false)
+  bool isBackground = false;
+
+  /// 文本最大行数；`0` 表示自然换行且不限行数，`null` 保留原生默认值。
+  ///
+  /// 仅对文本与按钮生效，设置时应使用非负整数。
+  int? numberOfLines;
+
+  /// 自定义内容面的圆角，单位 dp。
+  num? cornerRadius;
+
+  /// 自定义内容面的边框宽度，单位 dp；不改变内容本体的配置边界。
+  num? borderWidth;
+
+  /// 自定义内容面的边框颜色，支持 `#AARRGGBB`。
+  String? borderColor;
+
+  /// Button 的按压状态层颜色；透明按钮可用它表达文字按钮反馈。
+  String? pressedOverlayColor;
+
+  /// Button 的按压缩放比例，取值 `(0, 1]`；`1` 不增加缩放。
+  num? pressedScale;
+
+  /// Button 的状态与缩放过渡毫秒数；平台水波使用原生时序。
+  int? animationDuration;
+
+  /// Button 内边距 `[左, 上, 右, 下]`，单位 dp，必须提供四项。
+  List<num>? contentPadding;
+
+  /// 背景装饰的阴影颜色，支持 `#AARRGGBB`；未配置时不绘制额外阴影。
+  String? shadowColor;
+
+  /// 背景装饰的非负模糊半径，单位 dp，不改变卡片本体的边界。
+  num? shadowBlurRadius;
+
+  /// 背景装饰的阴影扩散距离，单位 dp；负值表示先收缩阴影形状。
+  num? shadowSpreadRadius;
+
+  /// 背景装饰的阴影偏移 `[x, y]`，单位 dp，必须提供两项。
+  List<num>? shadowOffset;
+
+  /// 创建 Android 控件配置，标识用于识别原生点击回调。
+  ShanYanCustomWidget(this.widgetId, this.type);
 
 //反序列化
   factory ShanYanCustomWidget.fromJson(Map<String, dynamic> json) =>
@@ -983,7 +1015,12 @@ class ShanYanCustomWidgetIOS {
   num? borderWidth;
   String? borderColor; // 自定义控件边框颜色
   String? textContent; // 自定义控件内容
-  double? textFont = 13.0; // 自定义控件文字大小，单位sp
+  /// 自定义控件字号，单位为 iOS 逻辑点；系统缩放由调用方应用。
+  double? textFont = 13.0;
+
+  /// 是否使用粗体；`null` 保留默认字体，字号仍以 iOS 逻辑点传入。
+  bool? textBold;
+
   String? textColor; // 自定义控件文字颜色
   String? backgroundColor; // 自定义控件背景颜色
   String? image; //按钮左侧图片 （Button available）
@@ -995,11 +1032,44 @@ class ShanYanCustomWidgetIOS {
   navPosition; //如需添加到导航栏，请设置控件位置（左或右，导航栏按钮仅支持自定义width、height）
   bool isFinish = true; //点击自定义控件是否自动销毁授权页
 
-  // ignore: invalid_required_positional_param
-  ShanYanCustomWidgetIOS(@required this.widgetId, @required this.type) {
-    this.widgetId = widgetId;
-    this.type = type;
-  }
+  /// 是否作为标准授权控件下方的装饰背景，默认为 `false`。
+  ///
+  /// 背景位于授权页背景图上方，不接收点击或无障碍焦点，
+  /// 不执行 [isFinish] 对应的关闭动作，也不添加到导航栏。
+  @JsonKey(defaultValue: false)
+  bool isBackground = false;
+
+  /// 文本最大行数；`0` 表示自然换行且不限行数，`null` 保留原生默认值。
+  ///
+  /// 仅对文本与按钮生效，设置时应使用非负整数。
+  int? numberOfLines;
+
+  /// Button 的按压状态层颜色；透明按钮可用它表达文字按钮反馈。
+  String? pressedOverlayColor;
+
+  /// Button 的按压缩放比例，取值 `(0, 1]`；`1` 不增加缩放。
+  num? pressedScale;
+
+  /// Button 的状态与缩放过渡毫秒数；`0` 表示即时反馈。
+  int? animationDuration;
+
+  /// Button 内边距 `[左, 上, 右, 下]`，单位为 iOS 逻辑点，必须提供四项。
+  List<num>? contentPadding;
+
+  /// 背景装饰的阴影颜色，支持 `#AARRGGBB`；未配置时不绘制额外阴影。
+  String? shadowColor;
+
+  /// 背景装饰的非负模糊半径，单位为 iOS 逻辑点，不改变卡片本体的边界。
+  num? shadowBlurRadius;
+
+  /// 背景装饰的阴影扩散距离，单位为 iOS 逻辑点；负值表示先收缩阴影形状。
+  num? shadowSpreadRadius;
+
+  /// 背景装饰的阴影偏移 `[x, y]`，单位为 iOS 逻辑点，必须提供两项。
+  List<num>? shadowOffset;
+
+  /// 创建 iOS 控件配置，标识用于识别原生点击回调。
+  ShanYanCustomWidgetIOS(this.widgetId, this.type);
 
 //反序列化
   factory ShanYanCustomWidgetIOS.fromJson(Map<String, dynamic> json) =>
@@ -1020,11 +1090,11 @@ String? getStringFromEnum<T>(T) {
   return T.toString().split('.').last;
 }
 
-///iOS 文字对齐方式
+/// iOS 文字对齐方式，序列化值与 UIKit 的 NSTextAlignment 一致。
 enum iOSTextAlignment {
-  @JsonValue(0)
-  center, // Visually centered 居中
   @JsonValue(1)
+  center, // Visually centered 居中
+  @JsonValue(0)
   left, // Visually left aligned 居左
   @JsonValue(2)
   right, // Visually right aligned 居右

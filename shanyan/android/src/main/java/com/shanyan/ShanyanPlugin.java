@@ -1,14 +1,19 @@
 package com.shanyan;
 
+import android.app.Activity;
 import android.content.Context;
+import android.content.res.Configuration;
 import android.content.res.Resources;
 import android.graphics.Color;
+import android.graphics.Typeface;
 import android.graphics.drawable.Drawable;
+import android.os.Build;
 import android.text.TextUtils;
 import android.util.Log;
 import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.View;
+import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.CheckBox;
 import android.widget.RelativeLayout;
@@ -19,6 +24,7 @@ import com.chuanglan.shanyan_sdk.listener.ActionListener;
 import com.chuanglan.shanyan_sdk.listener.AuthenticationExecuteListener;
 import com.chuanglan.shanyan_sdk.listener.GetPhoneInfoListener;
 import com.chuanglan.shanyan_sdk.listener.InitListener;
+import com.chuanglan.shanyan_sdk.listener.LoginActivityStatusListener;
 import com.chuanglan.shanyan_sdk.listener.OneKeyLoginListener;
 import com.chuanglan.shanyan_sdk.listener.OpenLoginAuthListener;
 import com.chuanglan.shanyan_sdk.listener.PricacyOnClickListener;
@@ -64,6 +70,8 @@ public class ShanyanPlugin implements FlutterPlugin, MethodCallHandler {
      */
     private Context context;
     private boolean isFinish;
+    // 仅记录本插件是否安装了扩展样式监听器，不持有授权 Activity 或其原生控件。
+    private boolean nativeAuthStyleListenerInstalled;
 
     @Override
     public void onAttachedToEngine(FlutterPluginBinding flutterPluginBinding) {
@@ -75,6 +83,7 @@ public class ShanyanPlugin implements FlutterPlugin, MethodCallHandler {
     @Override
     public void onDetachedFromEngine(FlutterPluginBinding binding) {
         channel.setMethodCallHandler(null);
+        clearNativeAuthStyleListener();
     }
 
     @Override
@@ -185,6 +194,8 @@ public class ShanyanPlugin implements FlutterPlugin, MethodCallHandler {
         }
         if (call.method.equals("removeAllListener")) {
             OneKeyLoginManager.getInstance().removeAllListener();
+            // SDK 的 removeAllListener 不清理 LoginActivityStatusListener，扩展监听需显式注销。
+            clearNativeAuthStyleListener();
             result.success(null);
         }
     }
@@ -416,20 +427,7 @@ public class ShanyanPlugin implements FlutterPlugin, MethodCallHandler {
         if (null != portraitConfig) {
             setAuthLayoutView(portraitConfig, builder);
         }
-        if (null != portraitWidgets) {
-            for (Map widgetMap : portraitWidgets) {
-                /// 新增自定义的控件
-                String type = (String) widgetMap.get("type");
-                Log.e(TAG, "widget_type=" + type);
-                if ("TextView".equals(type)) {
-                    addCustomTextWidgets(widgetMap, builder);
-                } else if ("Button".equals(type)) {
-                    addCustomBtnWidgets(widgetMap, builder);
-                } else {
-                    Log.e(TAG, "don't support widget");
-                }
-            }
-        }
+        addCustomWidgets(portraitWidgets, builder, false);
         if (null != portraitWidgetLayout) {
             for (Map widgetMap : portraitWidgetLayout) {
                 /// 新增自定义的控件
@@ -441,6 +439,8 @@ public class ShanyanPlugin implements FlutterPlugin, MethodCallHandler {
                 }
             }
         }
+        // 官方 SDK 将自定义控件插入 body 的索引 0，最后注册背景才能位于所有内容下方。
+        addCustomWidgets(portraitWidgets, builder, true);
 
         //横屏设置
         Map landscapeConfig = call.argument("androidLandscape");
@@ -450,20 +450,7 @@ public class ShanyanPlugin implements FlutterPlugin, MethodCallHandler {
         if (null != landscapeConfig) {
             setAuthLayoutView(landscapeConfig, landscapeBuilder);
         }
-        if (null != landscapeWidgets) {
-            for (Map widgetMap : landscapeWidgets) {
-                /// 新增自定义的控件
-                String type = (String) widgetMap.get("type");
-                Log.e(TAG, "landscapewidget_type=" + type);
-                if ("TextView".equals(type)) {
-                    addCustomTextWidgets(widgetMap, landscapeBuilder);
-                } else if ("Button".equals(type)) {
-                    addCustomBtnWidgets(widgetMap, landscapeBuilder);
-                } else {
-                    Log.e(TAG, "don't support widget");
-                }
-            }
-        }
+        addCustomWidgets(landscapeWidgets, landscapeBuilder, false);
         if (null != landscapeWidgetLayout) {
             for (Map widgetMap : landscapeWidgetLayout) {
                 /// 新增自定义的控件
@@ -475,6 +462,7 @@ public class ShanyanPlugin implements FlutterPlugin, MethodCallHandler {
                 }
             }
         }
+        addCustomWidgets(landscapeWidgets, landscapeBuilder, true);
         ShanYanUIConfig portraitUIConfig = builder.build();
         ShanYanUIConfig landscapeUIConfig;
         if (null != landscapeBuilder) {
@@ -483,6 +471,211 @@ public class ShanyanPlugin implements FlutterPlugin, MethodCallHandler {
             landscapeUIConfig = null;
         }
         OneKeyLoginManager.getInstance().setAuthThemeConfig(portraitUIConfig, landscapeUIConfig);
+        installNativeAuthStyleListener(portraitConfig, landscapeConfig);
+    }
+
+
+    /**
+     * 通过 SDK 公开生命周期在其真实控件完成初始化后补充样式。
+     * 每次主题调用替换不可变配置快照；不异步投递任务，也不复用上一页的控件。
+     */
+    private void installNativeAuthStyleListener(Map portraitConfig, Map landscapeConfig) {
+        final NativeAuthViewStyle portrait = new NativeAuthViewStyle(portraitConfig);
+        final NativeAuthViewStyle landscape = new NativeAuthViewStyle(landscapeConfig);
+        if (!portrait.hasChanges() && !landscape.hasChanges()) {
+            clearNativeAuthStyleListener();
+            return;
+        }
+        OneKeyLoginManager.getInstance().setLoginActivityStatusListener(
+                new NativeAuthStyleListener(portrait, landscape));
+        nativeAuthStyleListenerInstalled = true;
+    }
+
+    /**
+     * 主题移除扩展字段或 Flutter 引擎卸载时注销本插件安装的监听器。
+     * 未使用扩展样式的消费者不会被额外注册或清除 SDK 生命周期监听器。
+     */
+    private void clearNativeAuthStyleListener() {
+        if (nativeAuthStyleListenerInstalled) {
+            OneKeyLoginManager.getInstance().setLoginActivityStatusListener(null);
+            nativeAuthStyleListenerInstalled = false;
+        }
+    }
+
+    /**
+     * SDK 单例只保留无宿主引用的配置；协议页返回不会重新追加说明。
+     * SDK 在 onActivityCreated 前已完成真实说明赋值、按钮样式和点击监听器绑定。
+     */
+    private static final class NativeAuthStyleListener implements LoginActivityStatusListener {
+        private final NativeAuthViewStyle portrait;
+        private final NativeAuthViewStyle landscape;
+
+        private NativeAuthStyleListener(NativeAuthViewStyle portrait,
+                                        NativeAuthViewStyle landscape) {
+            this.portrait = portrait;
+            this.landscape = landscape;
+        }
+
+        @Override
+        public void onActivityCreated(Activity activity) {
+            if (activity.isFinishing()) {
+                return;
+            }
+            NativeAuthViewStyle style = activity.getResources().getConfiguration().orientation
+                    == Configuration.ORIENTATION_LANDSCAPE ? landscape : portrait;
+            style.apply(activity);
+        }
+
+        @Override
+        public void onActivityDestroyed(Activity activity) {
+            // 没有 Activity、View 或排队任务需要释放；旧页面销毁不能清掉新主题监听器。
+        }
+    }
+
+    /**
+     * 只保存本次主题显式提供的扩展值，空值保留 SDK 默认外观。
+     * 高度和宽度按 dp 换算，文本字号仍完全由 SDK 的 SP 配置管理。
+     */
+    private static final class NativeAuthViewStyle {
+        private final Float elevation;
+        private final Integer shadowColor;
+        private final String sloganSuffix;
+        private final Integer sloganWidth;
+        private final ShanyanViewStyle.ButtonInteraction interaction;
+
+        private NativeAuthViewStyle(Map config) {
+            Number elevationValue = config == null ? null
+                    : (Number) config.get("setLogBtnElevation");
+            elevation = elevationValue == null ? null : elevationValue.floatValue();
+            String colorValue = config == null ? null
+                    : (String) config.get("setLogBtnShadowColor");
+            shadowColor = colorValue == null ? null : Color.parseColor(colorValue);
+            sloganSuffix = config == null ? null : (String) config.get("setSloganTextSuffix");
+            Number widthValue = config == null ? null : (Number) config.get("setSloganWidth");
+            sloganWidth = widthValue == null ? null : widthValue.intValue();
+            interaction = new ShanyanViewStyle.ButtonInteraction(config, true);
+        }
+
+        private boolean hasChanges() {
+            return elevation != null || shadowColor != null
+                    || !TextUtils.isEmpty(sloganSuffix) || sloganWidth != null || interaction.hasChanges();
+        }
+
+        /** 仅按 SDK 公开资源 ID 修改目标控件，不更改宿主或 SDK 根视图层级。 */
+        private void apply(Activity activity) {
+            float density = activity.getResources().getDisplayMetrics().density;
+            View button = activity.findViewById(R.id.shanyan_view_bt_one_key_login);
+            if (button != null) {
+                if (elevation != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                    // 先确定静态 Z；后面的状态样式只控制缩放，不接管 SDK 点击事件。
+                    button.setStateListAnimator(null);
+                    button.setTranslationZ(0f);
+                    button.setElevation(Math.max(0f, elevation) * density);
+                }
+                if (shadowColor != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                    // ARGB 原样交给原生阴影，绝不再对按钮或 outline 乘一次 alpha。
+                    button.setOutlineAmbientShadowColor(shadowColor);
+                    button.setOutlineSpotShadowColor(shadowColor);
+                }
+                // API 21–27（含 APP 支持的 26–27）只能使用系统 elevation 阴影色；
+                // 不以软件假按钮、私有 API 或提高 minSdk 模拟 API 28 的颜色能力。
+                interaction.apply(button, null);
+            }
+            if (TextUtils.isEmpty(sloganSuffix) && sloganWidth == null) {
+                return;
+            }
+            View sloganView = activity.findViewById(R.id.shanyan_view_identify_tv);
+            if (!(sloganView instanceof TextView)) {
+                return;
+            }
+            TextView slogan = (TextView) sloganView;
+            CharSequence original = slogan.getText();
+            if (!TextUtils.isEmpty(sloganSuffix) && !TextUtils.isEmpty(original)
+                    && (original.length() < sloganSuffix.length()
+                    || !TextUtils.regionMatches(original,
+                    original.length() - sloganSuffix.length(),
+                    sloganSuffix, 0, sloganSuffix.length()))) {
+                // 保留 SDK 根据真实运营商生成的原文和 span；重复生命周期最多追加一次。
+                slogan.setText(TextUtils.concat(original, sloganSuffix));
+            }
+            // 只放开真实说明的自然换行，不缩字、不省略、不强制改变既有位置规则。
+            slogan.setSingleLine(false);
+            slogan.setMaxLines(Integer.MAX_VALUE);
+            slogan.setEllipsize(null);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                slogan.setAutoSizeTextTypeWithDefaults(TextView.AUTO_SIZE_TEXT_TYPE_NONE);
+            }
+            if (sloganWidth != null && sloganWidth > 0) {
+                slogan.setMaxWidth(Math.round(sloganWidth * density));
+            }
+            ViewGroup.LayoutParams params = slogan.getLayoutParams();
+            params.width = ViewGroup.LayoutParams.WRAP_CONTENT;
+            params.height = ViewGroup.LayoutParams.WRAP_CONTENT;
+            slogan.setLayoutParams(params);
+        }
+    }
+
+    /**
+     * 分别注册普通控件和装饰背景，不修改 SDK 自身的视图层级。
+     * 背景反向注册，使配置列表中靠后的背景在视觉上覆盖靠前的背景。
+     */
+    private void addCustomWidgets(List<Map> widgets, ShanYanUIConfig.Builder builder,
+                                 boolean backgrounds) {
+        if (widgets == null) {
+            return;
+        }
+        for (int offset = 0; offset < widgets.size(); offset++) {
+            int index = backgrounds ? widgets.size() - offset - 1 : offset;
+            Map widget = widgets.get(index);
+            if (Boolean.TRUE.equals(widget.get("isBackground")) != backgrounds) {
+                continue;
+            }
+            String type = (String) widget.get("type");
+            if ("TextView".equals(type)) {
+                addCustomTextWidgets(widget, builder);
+            } else if ("Button".equals(type)) {
+                addCustomBtnWidgets(widget, builder);
+            } else {
+                Log.e(TAG, "don't support widget");
+            }
+        }
+    }
+
+    /**
+     * 将公开配置应用到原生文本控件，并保留普通控件原有的点击和关闭行为。
+     * addCustomView 的第三个参数选择导航区域；false 始终表示授权页 body，
+     * 其背景由外层布局绘制，因此索引 0 的装饰仍在页面背景图上方。
+     */
+    private void registerCustomWidget(Map para, TextView customView,
+                                      ShanYanUIConfig.Builder builder) {
+        ShanyanViewStyle.applyCustomWidget(customView, para);
+        Boolean textBold = (Boolean) para.get("textBold");
+        if (textBold != null) {
+            // 保留控件字体家族，显式 false 恢复常规字重；null 不覆盖原生默认字重。
+            customView.setTypeface(customView.getTypeface(), textBold ? Typeface.BOLD : Typeface.NORMAL);
+        }
+        Number numberOfLines = (Number) para.get("numberOfLines");
+        if (numberOfLines != null) {
+            int lines = numberOfLines.intValue();
+            customView.setSingleLine(lines == 1);
+            customView.setMaxLines(lines == 0 ? Integer.MAX_VALUE : lines);
+        }
+        if (Boolean.TRUE.equals(para.get("isBackground"))) {
+            customView.setFocusable(false);
+            customView.setFocusableInTouchMode(false);
+            customView.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);
+            builder.addCustomView(customView, false, false, null);
+            return;
+        }
+        boolean isFinish = (Boolean) para.get("isFinish");
+        final HashMap jsonMap = new HashMap();
+        jsonMap.put(shanyan_widgetId, para.get("widgetId"));
+        builder.addCustomView(customView, isFinish, false, new ShanYanCustomInterface() {
+            @Override
+            public void onClick(Context context, View view) {
+                channel.invokeMethod("onReceiveClickWidgetEvent", jsonMap);
+            }
+        });
     }
 
     private void setMorePrivacy(List<Map> morePrivacy, ShanYanUIConfig.Builder builder) {
@@ -581,7 +774,6 @@ public class ShanyanPlugin implements FlutterPlugin, MethodCallHandler {
      */
     private void addCustomBtnWidgets(Map para, ShanYanUIConfig.Builder builder) {
         Log.d(TAG, "addCustomBtnView " + para);
-        String widgetId = (String) para.get("widgetId");
         int left = (Integer) para.get("left");
         int top = (Integer) para.get("top");
         int right = (Integer) para.get("right");
@@ -594,8 +786,17 @@ public class ShanyanPlugin implements FlutterPlugin, MethodCallHandler {
         Object backgroundColor = para.get("backgroundColor");
         Object backgroundImgPath = para.get("backgroundImgPath");
         Object alignmet = para.get("textAlignment");
-        boolean isFinish = (Boolean) para.get("isFinish");
-        Button customView = new Button(context);
+        final boolean isBackground = Boolean.TRUE.equals(para.get("isBackground"));
+        Button customView = new Button(context) {
+            // SDK 会在挂载后统一绑定监听器，装饰控件拒绝该绑定以保持触摸穿透。
+            @Override
+            public void setOnClickListener(View.OnClickListener listener) {
+                super.setOnClickListener(isBackground ? null : listener);
+                if (isBackground) {
+                    setClickable(false);
+                }
+            }
+        };
         customView.setText(textContent);
         if (textColor != null) {
             customView.setTextColor(Color.parseColor((String) textColor));
@@ -641,14 +842,7 @@ public class ShanyanPlugin implements FlutterPlugin, MethodCallHandler {
             mLayoutParams1.height = dp2Pix(context, (float) height);
         }
         customView.setLayoutParams(mLayoutParams1);
-        final HashMap jsonMap = new HashMap();
-        jsonMap.put(shanyan_widgetId, widgetId);
-        builder.addCustomView(customView, isFinish, false, new ShanYanCustomInterface() {
-            @Override
-            public void onClick(Context context, View view) {
-                channel.invokeMethod("onReceiveClickWidgetEvent", jsonMap);
-            }
-        });
+        registerCustomWidget(para, customView, builder);
     }
 
     /**
@@ -656,7 +850,6 @@ public class ShanyanPlugin implements FlutterPlugin, MethodCallHandler {
      */
     private void addCustomTextWidgets(Map para, ShanYanUIConfig.Builder builder) {
         Log.d(TAG, "addCustomTextView " + para);
-        String widgetId = (String) para.get("widgetId");
         int left = (Integer) para.get("left");
         int top = (Integer) para.get("top");
         int right = (Integer) para.get("right");
@@ -669,8 +862,17 @@ public class ShanyanPlugin implements FlutterPlugin, MethodCallHandler {
         Object backgroundColor = para.get("backgroundColor");
         Object backgroundImgPath = para.get("backgroundImgPath");
         Object alignmet = para.get("textAlignment");
-        boolean isFinish = (Boolean) para.get("isFinish");
-        TextView customView = new TextView(context);
+        final boolean isBackground = Boolean.TRUE.equals(para.get("isBackground"));
+        TextView customView = new TextView(context) {
+            // 与装饰按钮一致，不让 SDK 的统一监听器把背景变成可点击区域。
+            @Override
+            public void setOnClickListener(View.OnClickListener listener) {
+                super.setOnClickListener(isBackground ? null : listener);
+                if (isBackground) {
+                    setClickable(false);
+                }
+            }
+        };
         customView.setText(textContent);
         if (textColor != null) {
             customView.setTextColor(Color.parseColor((String) textColor));
@@ -716,14 +918,7 @@ public class ShanyanPlugin implements FlutterPlugin, MethodCallHandler {
             mLayoutParams1.height = dp2Pix(context, (float) height);
         }
         customView.setLayoutParams(mLayoutParams1);
-        final HashMap jsonMap = new HashMap();
-        jsonMap.put(shanyan_widgetId, widgetId);
-        builder.addCustomView(customView, isFinish, false, new ShanYanCustomInterface() {
-            @Override
-            public void onClick(Context context, View view) {
-                channel.invokeMethod("onReceiveClickWidgetEvent", jsonMap);
-            }
-        });
+        registerCustomWidget(para, customView, builder);
     }
 
     private void setAuthLayoutView(Map shanYanUIConfig, ShanYanUIConfig.Builder builder) {

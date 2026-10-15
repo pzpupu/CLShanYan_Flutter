@@ -1,0 +1,5 @@
+# 插件独立解析与分析，不继承消费 APP 的排除目录或 lint 依赖。
+# example 有自己的 pubspec 和分析配置，不属于插件源码检查范围。
+analyzer:
+  exclude:
+    - example/**

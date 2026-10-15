@@ -19,10 +19,11 @@ NS_ASSUME_NONNULL_BEGIN
 //CALayer
 @property NSNumber * layer_cornerRadius;
 @property NSNumber * layer_borderWidth;
-@property(nullable) CGColorRef layer_borderColor;
+/// 强持有 UIKit 颜色，避免异步创建控件时临时 UIColor 的 CGColorRef 悬空。
+@property(nullable,nonatomic,strong) UIColor *layer_borderColor;
 @property float layer_opacity;
 /** Shadow properties. **/
-@property(nullable) CGColorRef layer_shadowColor;
+@property(nullable,nonatomic,strong) UIColor *layer_shadowColor;
 @property float layer_shadowOpacity;
 @property CGSize layer_shadowOffset;
 @property NSNumber * layer_shadowRadius;

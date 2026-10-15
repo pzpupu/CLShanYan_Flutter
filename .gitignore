@@ -1,6 +1,9 @@
 .DS_Store
 .dart_tool/
 
+# Flutter 生成的本机插件路径缓存不参与源码交付。
+.flutter-plugins-dependencies
+
 .packages
 .pub/
 

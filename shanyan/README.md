@@ -2,6 +2,8 @@
 
 注：「[插件示例代码地址](https://github.com/253CL/CLShanYan_Flutter)」<br />
 
+本 fork 的维护分支、原生版本和新增配置契约以[仓库维护说明](../README.md)为准；下文保留上游配置示例。
+
 <a name="AiyJS"></a>
 
 ## 概述
@@ -20,16 +22,15 @@
 
 ### 安装
 
-在工程 pubspec.yaml 中加入 dependencies
+将本仓库作为消费工程 `third_party/CLShanYan_Flutter/` 下的 Git 子模块并初始化后，在 Flutter 工程 `pubspec.yaml` 中声明本地包：
 
-- github 集成
-
-```dart
-dependencies:shanyan:git:url: git: //github.com/253CL/CLShanYan_Flutter.git
-path: shanyan
-ref: v2.3.4
-.2
+```yaml
+dependencies:
+  shanyan:
+    path: third_party/CLShanYan_Flutter/shanyan
 ```
+
+主仓库 gitlink 固定 SDK 提交，维护分支为 `ai-love-sdk-compat`；不通过 Pub 的浮动 Git ref 绕过子模块版本。独立生成和检查命令见[维护说明](../README.md#生成与检查)。
 
 <a name="UlDef"></a>
 

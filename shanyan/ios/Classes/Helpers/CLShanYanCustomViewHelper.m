@@ -48,7 +48,8 @@
     }
     
     if (self.button_contentEdgeInsets) {
-        [customButton setTitleEdgeInsets:self.button_contentEdgeInsets.UIEdgeInsetsValue];
+        // contentPadding 是整个按钮内容区边距，不是仅移动标题的位置。
+        [customButton setContentEdgeInsets:self.button_contentEdgeInsets.UIEdgeInsetsValue];
     }
     if (self.button_titleEdgeInsets) {
         [customButton setTitleEdgeInsets:self.button_titleEdgeInsets.UIEdgeInsetsValue];
@@ -71,6 +72,10 @@
     
     if (self.button_numberOfLines!=nil) {
         [customButton.titleLabel setNumberOfLines:self.button_numberOfLines.integerValue];
+        // 显式多行配置采用自然换行；未配置时不改变 UIButton 的默认行为。
+        if (self.button_numberOfLines.integerValue != 1) {
+            customButton.titleLabel.lineBreakMode = NSLineBreakByWordWrapping;
+        }
     }
     
     if (self.button_contentVerticalAlignment!=nil) {
@@ -97,6 +102,10 @@
     }
     if (self.label_numberOfLines!=nil) {
         [customLabel setNumberOfLines:self.label_numberOfLines.integerValue];
+        // 0 表示不限行数，固定宽度下由 UILabel 计算自然换行。
+        if (self.label_numberOfLines.integerValue != 1) {
+            customLabel.lineBreakMode = NSLineBreakByWordWrapping;
+        }
     }
     if (self.label_textAlignment!=nil) {
         [customLabel setTextAlignment:self.label_textAlignment.integerValue];
@@ -145,7 +154,7 @@
     }
     
     if (self.layer_borderColor) {
-        customView.layer.borderColor = self.layer_borderColor;
+        customView.layer.borderColor = self.layer_borderColor.CGColor;
         
     }
     

@@ -18,6 +18,7 @@ import android.widget.Button;
 import android.widget.CheckBox;
 import android.widget.RelativeLayout;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import com.chuanglan.shanyan_sdk.OneKeyLoginManager;
 import com.chuanglan.shanyan_sdk.listener.ActionListener;
@@ -72,6 +73,11 @@ public class ShanyanPlugin implements FlutterPlugin, MethodCallHandler {
     private boolean isFinish;
     // 仅记录本插件是否安装了扩展样式监听器，不持有授权 Activity 或其原生控件。
     private boolean nativeAuthStyleListenerInstalled;
+    // Toast只属于当前请求；SDK Activity销毁或引擎卸载时撤销，不等待用户确认。
+    private String activeRequestId;
+    private Toast authErrorToast;
+    private View authErrorOwnerView;
+    private View.OnAttachStateChangeListener authErrorDetachListener;
 
     @Override
     public void onAttachedToEngine(FlutterPluginBinding flutterPluginBinding) {
@@ -83,6 +89,8 @@ public class ShanyanPlugin implements FlutterPlugin, MethodCallHandler {
     @Override
     public void onDetachedFromEngine(FlutterPluginBinding binding) {
         channel.setMethodCallHandler(null);
+        activeRequestId = null;
+        clearAuthError();
         clearNativeAuthStyleListener();
     }
 
@@ -123,6 +131,8 @@ public class ShanyanPlugin implements FlutterPlugin, MethodCallHandler {
             openLoginAuth(call, result);
         }
         if (call.method.equals("finishAuthActivity")) {
+            activeRequestId = null;
+            clearAuthError();
             OneKeyLoginManager.getInstance().finishAuthActivity();
             // 回执只表示已执行关闭调用，不代表运营商网络请求已经取消。
             result.success(null);
@@ -134,7 +144,10 @@ public class ShanyanPlugin implements FlutterPlugin, MethodCallHandler {
             startAuthentication(call, result);
         }
         if (call.method.equals("setLoadingVisibility")) {
-            setLoadingVisibility(call);
+            setLoadingVisibility(call, result);
+        }
+        if (call.method.equals("showAuthError")) {
+            showAuthError(call, result);
         }
         if (call.method.equals("setCheckBoxValue")) {
             setCheckBoxValue(call);
@@ -277,9 +290,70 @@ public class ShanyanPlugin implements FlutterPlugin, MethodCallHandler {
         OneKeyLoginManager.getInstance().setCheckBoxValue(isChecked);
     }
 
-    private void setLoadingVisibility(MethodCall call) {
+    /** 仅允许当前授权页接收反馈命令；不回退到 Flutter Activity。 */
+    private Activity authActivityForCall(MethodCall call, Result result) {
+        String requestId = call.argument("requestId");
+        Activity activity = OneKeyLoginManager.getInstance().getAuthActivity();
+        if (requestId == null || !requestId.equals(activeRequestId)
+                || activity == null || activity.isFinishing() || activity.isDestroyed()) {
+            result.error("auth_page_unavailable", "授权页已关闭或请求已失效", null);
+            return null;
+        }
+        return activity;
+    }
+
+    /** 通过 SDK 公开方法立即修改 loading，不排队查找另一轮页面。 */
+    private void setLoadingVisibility(MethodCall call, Result result) {
+        if (authActivityForCall(call, result) == null) {
+            return;
+        }
         boolean visibility = call.argument("visibility");
         OneKeyLoginManager.getInstance().setLoadingVisibility(visibility);
+        result.success(null);
+    }
+
+    /** 使用系统非阻塞Toast，提交展示后立即回执；提示仍可见时允许用户再次点击。 */
+    private void showAuthError(MethodCall call, Result result) {
+        Activity activity = authActivityForCall(call, result);
+        if (activity == null) {
+            return;
+        }
+        // 替换旧消息而非排队；应用Context避免Toast持有已关闭的授权Activity。
+        clearAuthError();
+        String message = call.argument("message");
+        final Toast toast = Toast.makeText(context, message, Toast.LENGTH_LONG);
+        authErrorToast = toast;
+        authErrorOwnerView = activity.getWindow().getDecorView();
+        authErrorDetachListener = new View.OnAttachStateChangeListener() {
+            @Override
+            public void onViewAttachedToWindow(View view) {
+                // 只观察当前授权页销毁，不接管 SDK 的创建与布局。
+            }
+
+            @Override
+            public void onViewDetachedFromWindow(View view) {
+                if (authErrorToast == toast) {
+                    clearAuthError();
+                }
+            }
+        };
+        authErrorOwnerView.addOnAttachStateChangeListener(authErrorDetachListener);
+        toast.show();
+        result.success(null);
+    }
+
+    /** 关闭页面或替换消息时撤销Toast及页面监听，不保留模态提示或挂起回执。 */
+    private void clearAuthError() {
+        Toast toast = authErrorToast;
+        authErrorToast = null;
+        if (authErrorOwnerView != null && authErrorDetachListener != null) {
+            authErrorOwnerView.removeOnAttachStateChangeListener(authErrorDetachListener);
+        }
+        authErrorOwnerView = null;
+        authErrorDetachListener = null;
+        if (toast != null) {
+            toast.cancel();
+        }
     }
 
     private void startAuthentication(MethodCall call, final Result result) {
@@ -312,6 +386,8 @@ public class ShanyanPlugin implements FlutterPlugin, MethodCallHandler {
     private void openLoginAuth(MethodCall call, final Result result) {
         // 捕获发起页面时的编号，异步结果不得借用后来页面的编号。
         final String requestId = call.argument("requestId");
+        activeRequestId = requestId;
+        clearAuthError();
         //闪验SDK 拉起授权页
         OneKeyLoginManager.getInstance().openLoginAuth(isFinish, new OpenLoginAuthListener() {
             @Override
@@ -332,6 +408,11 @@ public class ShanyanPlugin implements FlutterPlugin, MethodCallHandler {
         }, new OneKeyLoginListener() {
             @Override
             public void getOneKeyLoginStatus(int code, String msg) {
+                // 返回事件只清理其所属页面，旧回调不能影响新页面反馈。
+                if (code == 1011 && requestId != null && requestId.equals(activeRequestId)) {
+                    activeRequestId = null;
+                    clearAuthError();
+                }
                 //点击授权页“一键登录”按钮或者返回键（包括物理返回键）回调
                 Map<String, Object> map = new HashMap<>();
                 map.put("requestId", requestId);

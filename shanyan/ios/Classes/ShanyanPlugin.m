@@ -17,6 +17,11 @@
 
 /// 样式快照按 SDK 授权页弱引用隔离；旧页面销毁后自动释放，不串用新请求配置。
 @property(nonatomic,strong) NSMapTable<UIView *, NSDictionary *> *authPageStyles;
+
+/// 原生命令与打开页面的编号绑定，不能操作另一轮授权页。
+@property(nonatomic,copy) NSString *activeRequestId;
+/// 仅持有当前页的非交互 toast；关闭或替换提示时立即移除，不持有待确认回执。
+@property(nonatomic,strong) UIView *authErrorToast;
 @end
 
 @implementation ShanyanPlugin
@@ -40,6 +45,15 @@
     [registrar addMethodCallDelegate:instance channel:channel];
 }
 
+/// 引擎卸载不保留 toast 或已失效页面的命令入口。
+- (void)detachFromEngineForRegistrar:(NSObject<FlutterPluginRegistrar> *)registrar {
+    [ShanyanPlugin performMainBlock:^{
+        self.activeRequestId = nil;
+        [self clearAuthError];
+        self.channel = nil;
+    }];
+}
+
 - (void)handleMethodCall:(FlutterMethodCall*)call result:(FlutterResult)result {
     if ([@"getPlatformVersion" isEqualToString:call.method]) {
         result([@"iOS " stringByAppendingString:[[UIDevice currentDevice] systemVersion]]);
@@ -56,7 +70,9 @@
     }else if ([@"finishAuthControllerCompletion" isEqualToString:call.method]){
         [self finishAuthControllerCompletion:result];
     }else if ([@"setLoadingVisibility" isEqualToString:call.method]){
-        [self setLoadingVisibility:call];
+        [self setLoadingVisibility:call complete:result];
+    }else if ([@"showAuthError" isEqualToString:call.method]){
+        [self showAuthError:call complete:result];
     }else if ([@"setCheckBoxValue" isEqualToString:call.method]){
         [self setCheckBoxValue:call];
     }else if ([@"clearScripCache" isEqualToString:call.method]){
@@ -115,13 +131,112 @@
         [CLShanYanSDKManager setCheckBoxValue:[argv[@"isChecked"] boolValue]];
     }
 }
-- (void)setLoadingVisibility:(FlutterMethodCall*)call {
-    NSDictionary* argv = call.arguments;
-    if (argv != nil && [argv isKindOfClass:[NSDictionary class]] && [argv[@"visibility"] boolValue] == NO) {
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            [CLShanYanSDKManager hideLoading];
-        });
+/// 校验页面代际及 SDK 公开导航容器，不向 Flutter 底层页面展示业务错误。
+- (UINavigationController *)authNavigationForCall:(FlutterMethodCall *)call
+                                       complete:(FlutterResult)complete {
+    NSString *requestId = call.arguments[@"requestId"];
+    UINavigationController *navigation = [CLShanYanSDKManager authNavigationController];
+    if (![requestId isKindOfClass:NSString.class] ||
+        ![self.activeRequestId isEqualToString:requestId] ||
+        !navigation.viewIfLoaded.window || navigation.isBeingDismissed) {
+        complete([FlutterError errorWithCode:@"auth_page_unavailable"
+                                    message:@"授权页已关闭或请求已失效"
+                                    details:nil]);
+        return nil;
     }
+    return navigation;
+}
+
+/// iOS 2.3.7.7 只有公开 hideLoading；显示始终由 SDK 的有效按钮点击负责。
+- (void)setLoadingVisibility:(FlutterMethodCall *)call complete:(FlutterResult)complete {
+    [ShanyanPlugin performMainBlock:^{
+        if (![self authNavigationForCall:call complete:complete]) {
+            return;
+        }
+        if ([call.arguments[@"visibility"] boolValue]) {
+            complete([FlutterError errorWithCode:@"unsupported_operation"
+                                        message:@"iOS SDK 仅支持隐藏 loading，点击登录按钮会自动显示"
+                                        details:nil]);
+            return;
+        }
+        // 不再延迟 0.1 秒后查找全局页面；SDK 在此刻捕获当前页 view 后排队移除。
+        [CLShanYanSDKManager hideLoading];
+        // SDK 的移除动作已排在主队列，回执排在其后，调用方可顺序展示错误。
+        dispatch_async(dispatch_get_main_queue(), ^{
+            complete(nil);
+        });
+    }];
+}
+
+/// Toast 只占据消息所需空间，不创建模态控制器或拦截触摸，展示后立即回执。
+- (void)showAuthError:(FlutterMethodCall *)call complete:(FlutterResult)complete {
+    [ShanyanPlugin performMainBlock:^{
+        UINavigationController *navigation = [self authNavigationForCall:call complete:complete];
+        if (!navigation) {
+            return;
+        }
+        UIViewController *presenter = navigation;
+        while (presenter.presentedViewController) {
+            presenter = presenter.presentedViewController;
+        }
+        if (!presenter.viewIfLoaded.window || presenter.isBeingDismissed) {
+            complete([FlutterError errorWithCode:@"auth_page_unavailable"
+                                        message:@"授权页正在关闭"
+                                        details:nil]);
+            return;
+        }
+        // 后一次错误替换前一次，不堆积消息，也不延迟用户的下一次点击。
+        [self clearAuthError];
+        UIView *host = presenter.view;
+        UIView *toast = [[UIView alloc] init];
+        toast.translatesAutoresizingMaskIntoConstraints = NO;
+        toast.userInteractionEnabled = NO;
+        toast.accessibilityElementsHidden = YES;
+        toast.backgroundColor = [UIColor.labelColor colorWithAlphaComponent:0.9];
+        toast.layer.cornerRadius = 12;
+        toast.clipsToBounds = YES;
+        UILabel *label = [[UILabel alloc] init];
+        label.translatesAutoresizingMaskIntoConstraints = NO;
+        label.text = call.arguments[@"message"];
+        label.textColor = UIColor.systemBackgroundColor;
+        label.font = [UIFont preferredFontForTextStyle:UIFontTextStyleSubheadline];
+        label.adjustsFontForContentSizeCategory = YES;
+        label.numberOfLines = 0;
+        label.textAlignment = NSTextAlignmentCenter;
+        [toast addSubview:label];
+        [host addSubview:toast];
+        // 只约束自有 toast，不修改 SDK 布局；安全区内多行排版，不覆盖整张页面。
+        UILayoutGuide *safeArea = host.safeAreaLayoutGuide;
+        [NSLayoutConstraint activateConstraints:@[
+            [toast.centerXAnchor constraintEqualToAnchor:safeArea.centerXAnchor],
+            [toast.leadingAnchor constraintGreaterThanOrEqualToAnchor:safeArea.leadingAnchor constant:24],
+            [toast.trailingAnchor constraintLessThanOrEqualToAnchor:safeArea.trailingAnchor constant:-24],
+            [toast.widthAnchor constraintLessThanOrEqualToConstant:480],
+            [toast.bottomAnchor constraintEqualToAnchor:safeArea.bottomAnchor constant:-24],
+            [label.leadingAnchor constraintEqualToAnchor:toast.leadingAnchor constant:16],
+            [label.trailingAnchor constraintEqualToAnchor:toast.trailingAnchor constant:-16],
+            [label.topAnchor constraintEqualToAnchor:toast.topAnchor constant:12],
+            [label.bottomAnchor constraintEqualToAnchor:toast.bottomAnchor constant:-12],
+        ]];
+        self.authErrorToast = toast;
+        // 读屏只播报，不转移焦点或要求确认；普通触摸始终穿透 toast。
+        UIAccessibilityPostNotification(UIAccessibilityAnnouncementNotification, label.text);
+        __weak typeof(self) weakSelf = self;
+        __weak UIView *weakToast = toast;
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(3.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            // 已被替换或已关闭的旧提示不得移除下一张页面的新 toast。
+            if (weakSelf.authErrorToast == weakToast) {
+                [weakSelf clearAuthError];
+            }
+        });
+        complete(nil);
+    }];
+}
+
+/// 关页、取消和重复反馈共用清理路径；不等待消失动画或用户操作。
+- (void)clearAuthError {
+    [self.authErrorToast removeFromSuperview];
+    self.authErrorToast = nil;
 }
 
 -(void)setActionListener{
@@ -297,6 +412,8 @@
 -(void)quickAuthLoginWithConfigure:(NSDictionary *)clUIConfigure complete:(FlutterResult)complete{
     // 捕获本次编号，关闭后的迟到回调由 Dart 桥接层拒绝。
     NSString *requestId = [clUIConfigure[@"requestId"] copy];
+    self.activeRequestId = requestId;
+    [self clearAuthError];
     
     CLUIConfigure * baseUIConfigure = [self configureWithConfig:clUIConfigure];
     baseUIConfigure.viewController = [self findVisibleVC];
@@ -322,6 +439,12 @@
                 NSMutableDictionary *event = [[ShanyanPlugin completeResultToJson:completeResult] mutableCopy];
                 if (requestId != nil) {
                     event[@"requestId"] = requestId;
+                }
+                // 只清理当前页的取消事件；旧 SDK 回调不能关闭新页面的提示。
+                if ([event[@"code"] integerValue] == 1011 &&
+                    [strongSelf.activeRequestId isEqualToString:requestId]) {
+                    strongSelf.activeRequestId = nil;
+                    [strongSelf clearAuthError];
                 }
                 [strongSelf.channel invokeMethod:@"onReceiveAuthPageEvent" arguments:event];
             }];
@@ -1529,7 +1652,7 @@
     
     
     if (sender.isFinish) {
-        [CLShanYanSDKManager finishAuthControllerCompletion:nil];
+        [self finishAuthControllerCompletion:nil];
     }
 }
 
@@ -1827,6 +1950,9 @@
 }
 
 - (void)finishAuthControllerCompletion:(FlutterResult)completion{
+    // 先移除当前页 toast，再关闭 SDK 页面；提示没有模态动画或待确认回执。
+    self.activeRequestId = nil;
+    [self clearAuthError];
     [CLShanYanSDKManager finishAuthControllerAnimated:YES
                                            Completion:^{
         if (completion) {

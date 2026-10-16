@@ -117,34 +117,37 @@ class _MyAppState extends State<MyApp> {
 
   Future<void> openLoginAuthPlatformState() async {
     ///闪验SDK 设置授权页一键登录回调（“一键登录按钮”、返回按钮（包括物理返回键））
-    oneKeyLoginManager.setOneKeyLoginListener((ShanYanResult shanYanResult) {
+    oneKeyLoginManager
+        .setOneKeyLoginListener((ShanYanResult shanYanResult) async {
       setState(() {
         _code = shanYanResult.code ?? 0;
         _result = shanYanResult.message ?? "";
         _content = shanYanResult.toJson().toString();
       });
 
-      oneKeyLoginManager.setLoadingVisibility(true);
+      // 每次有效点击由 SDK 自动显示 loading；iOS 不提供主动显示接口。
 
       if (1000 == shanYanResult.code) {
-        ///一键登录获取token成功
-
-        oneKeyLoginManager.finishAuthControllerCompletion();
+        // 此示例只演示 SDK 取号并结束展示，不代表已建立业务会话。
+        // 正式消费者须等待后端认证成功才关闭，失败时按下方路径留页反馈。
+        await oneKeyLoginManager.finishAuthControllerCompletion();
       } else if (1011 == shanYanResult.code) {
-        ///点击返回/取消 （强制自动销毁）
-        oneKeyLoginManager.setLoadingVisibility(false);
+        // SDK 已关闭页面，不再向已失效页面发送 loading 命令。
       } else {
-        ///一键登录获取token失败
-
-        //关闭授权页
-        oneKeyLoginManager.finishAuthControllerCompletion();
+        // 失败后保留原页，toast提交后立即允许手动重试，不等待提示消失。
+        await oneKeyLoginManager.setLoadingVisibility(false);
+        await oneKeyLoginManager.showAuthError(
+          shanYanResult.message ?? '取号失败，请重试',
+        );
       }
     });
 
     ///闪验SDK 拉起授权页
-    oneKeyLoginManager.openLoginAuth(
+    oneKeyLoginManager
+        .openLoginAuth(
       requestId: '${++_authRequestSequence}',
-    ).then((ShanYanResult shanYanResult) {
+    )
+        .then((ShanYanResult shanYanResult) {
       setState(() {
         _code = shanYanResult.code ?? 0;
         _result = shanYanResult.message ?? "";

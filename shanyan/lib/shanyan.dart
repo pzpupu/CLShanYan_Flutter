@@ -56,17 +56,20 @@ class OneKeyLoginManager {
 
   /// 设置预取号超时时间（单位：秒）(Android + iOS)
   Future<void> setTimeOutForPreLogin(int timeOut) async {
-    await _channel.invokeMethod<void>("setTimeOutForPreLogin", {"timeOut": timeOut});
+    await _channel
+        .invokeMethod<void>("setTimeOutForPreLogin", {"timeOut": timeOut});
   }
 
   /// 设置是否获取OAID
   Future<void> getOaidEnable(bool oaidEnable) async {
-    await _channel.invokeMethod<void>("getOaidEnable", {"oaidEnable": oaidEnable});
+    await _channel
+        .invokeMethod<void>("getOaidEnable", {"oaidEnable": oaidEnable});
   }
 
   /// 设置是否获取iccid
   Future<void> getSinbEnable(bool sinbEnable) async {
-    await _channel.invokeMethod<void>("getSinbEnable", {"sinbEnable": sinbEnable});
+    await _channel
+        .invokeMethod<void>("getSinbEnable", {"sinbEnable": sinbEnable});
   }
 
   /// 设置是否获取IMSI
@@ -139,8 +142,8 @@ class OneKeyLoginManager {
   Future<ShanYanResult> openLoginAuth({required String requestId}) async {
     _activeRequestId = requestId;
     if (Platform.isAndroid) {
-      Map<dynamic, dynamic> result =
-          await _channel.invokeMethod("openLoginAuth", {"requestId": requestId});
+      Map<dynamic, dynamic> result = await _channel
+          .invokeMethod("openLoginAuth", {"requestId": requestId});
       Map<String, dynamic> newResult = new Map<String, dynamic>.from(result);
       return ShanYanResult.fromJson(newResult);
     } else if (Platform.isIOS) {
@@ -185,9 +188,29 @@ class OneKeyLoginManager {
     _channel.invokeMethod("setCheckBoxValue", {"isChecked": isChecked});
   }
 
-  ///闪验SDK 设置授权页loading是否隐藏 Android+IOS
-  void setLoadingVisibility(bool visibility) {
-    _channel.invokeMethod("setLoadingVisibility", {"visibility": visibility});
+  /// 控制当前授权页的 loading，并等待原生执行回执。
+  ///
+  /// Android 支持显示和隐藏；iOS 仅支持 `false`，传入 `true` 会返回
+  /// `unsupported_operation` 平台错误。两端每次有效登录点击均由 SDK 自动显示
+  /// loading，失败后隐藏即可在同一页重试，无需重新拉页或主动触发登录。
+  Future<void> setLoadingVisibility(bool visibility) async {
+    // 将发出命令时的页面编号交给原生校验，排队的旧命令不能操作新页面。
+    await _channel.invokeMethod<void>("setLoadingVisibility", {
+      "requestId": _activeRequestId,
+      "visibility": visibility,
+    });
+  }
+
+  /// 在当前原生授权页显示非阻塞错误 toast，提交展示后立即完成。
+  ///
+  /// 调用前应等待 [setLoadingVisibility] 隐藏 loading；不等待提示自动消失，
+  /// 不拦截点击或要求确认。重复反馈替换旧消息，关页清理提示，不主动重试。
+  /// 页面已失效时返回 `auth_page_unavailable` 平台错误。
+  Future<void> showAuthError(String message) async {
+    await _channel.invokeMethod<void>("showAuthError", {
+      "requestId": _activeRequestId,
+      "message": message,
+    });
   }
 
   ///闪验SDK 本机号校验获取token (Android+iOS)

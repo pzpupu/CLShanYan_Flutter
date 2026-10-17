@@ -221,9 +221,10 @@
         self.authErrorToast = toast;
         // 读屏只播报，不转移焦点或要求确认；普通触摸始终穿透 toast。
         UIAccessibilityPostNotification(UIAccessibilityAnnouncementNotification, label.text);
+        // 保留 5 秒供用户读完错误和重试指引，展示期间仍允许继续操作。
         __weak typeof(self) weakSelf = self;
         __weak UIView *weakToast = toast;
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(3.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(5.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             // 已被替换或已关闭的旧提示不得移除下一张页面的新 toast。
             if (weakSelf.authErrorToast == weakToast) {
                 [weakSelf clearAuthError];

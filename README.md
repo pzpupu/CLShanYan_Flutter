@@ -28,7 +28,7 @@ await oneKeyLoginManager.showAuthError(message);
 ```
 
 - `Future<void> setLoadingVisibility(bool visibility)`：Android 支持显示、隐藏；iOS 2.3.7.7 的公开 `CLShanYanSDKManager.h` 仅提供 `hideLoading`，因此 `true` 明确返回 `PlatformException(code: 'unsupported_operation')`，不再无声假成功。两端正常重试均不需要传 `true`。
-- `Future<void> showAuthError(String message)`：在 SDK 原生授权页上展示非阻塞 toast，提交展示后立即完成，不等待自动消失、不要求确认或拦截点击。Android 使用系统 `Toast.LENGTH_LONG`；iOS 使用安全区内不可交互的原生消息视图，3.5秒后自动移除。取消、主动关页和引擎卸载清理提示；认证单飞只保持到展示回执，不覆盖 toast 的显示时长。
+- `Future<void> showAuthError(String message)`：在 SDK 原生授权页上展示非阻塞 toast，提交展示后立即完成，不等待自动消失、不要求确认或拦截点击。Android 使用系统 `Toast.LENGTH_LONG`；iOS 使用安全区内不可交互的原生消息视图，5秒后自动移除。取消、主动关页和引擎卸载清理提示；认证单飞只保持到展示回执，不覆盖 toast 的显示时长。
 - 两条命令携带发出时的 `requestId`，原生拒绝失效页面（`auth_page_unavailable`）；重复反馈替换旧 toast，不排队或报“已有弹窗”。错误不会落到被原生页遮住的 Flutter SnackBar。调用方仍须丢弃已经结束的业务任务，不能把旧业务结果重新标成新页面请求。
 - iOS 不再额外延迟 0.1 秒后调用全局 `hideLoading`。在主线程校验页面后立即调用官方方法，回执排在 SDK 已排队的移除动作之后；SDK 捕获的是当页 view，不会让旧隐藏任务作用于新页。
 
